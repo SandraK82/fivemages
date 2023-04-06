@@ -25,7 +25,7 @@ public class Goblin : MonoBehaviour
 
     [SerializeField] private float escapeRadius = 60f;
 
-    private int magic = 0;
+    public int magic = 0;
 
     public int level = 1;
 
@@ -54,16 +54,11 @@ public class Goblin : MonoBehaviour
         origin = transform.position;
 
         // the goblin awakes and wants to have a color/magic
-        magic = UnityEngine.Random.Range(0, 5);
-        SetWingColor();
-        SetTarget();
-
+        // magic = UnityEngine.Random.Range(0, 5);
         beamTimeOriginal = beamTime = 7f / level;
         state = GoblinState.BEAMING;
         originalMaterials = new Dictionary<MeshRenderer, Material>();
         PrepareBeam(this.transform);
-        Debug.Log("found " + originalMaterials.Count + " renderer");
-        
     }
 
     private void PrepareBeam(Transform t)
@@ -148,7 +143,10 @@ public class Goblin : MonoBehaviour
                     {
                         mr.material = originalMaterials[mr];
                     }
-                } else
+                    SetWingColor();
+                    SetTarget();
+                }
+                else
                 {
                     foreach (MeshRenderer mr in originalMaterials.Keys)
                     {
@@ -177,7 +175,7 @@ public class Goblin : MonoBehaviour
         if (transform.position.magnitude >= escapeRadius) // the pentagram is on 0,0,0 therefore we just need our distance from zero
         {
             Debug.Log("dead!");
-            Destroy(this.gameObject);
+            Destroy(this.transform.parent.gameObject);
             OnGoblinEscaped?.Invoke(this, EventArgs.Empty);
         }
     }

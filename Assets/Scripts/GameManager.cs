@@ -11,7 +11,7 @@ public class GameManager : MonoBehaviour
     [SerializeField] private int level = 1;
 
     [SerializeField] private Transform pentagram;
-    [SerializeField] private Transform portal;
+    [SerializeField] private List<Transform> portals;
     [SerializeField] private Transform lightBlue;
     [SerializeField] private Transform lightGreen;
     [SerializeField] private Transform lightWhite;
@@ -41,7 +41,10 @@ public class GameManager : MonoBehaviour
     private void Awake()
     {
         Goblin.OnGoblinEscaped += OnGoblinEscaped;
-
+        foreach (Transform portal in portals)
+        {
+            portal.gameObject.SetActive(false);
+        }
     }
 
     private void OnGoblinEscaped(object sender, EventArgs e)
@@ -103,7 +106,11 @@ public class GameManager : MonoBehaviour
             case GameState.AWAKE_PORTAL:
                 if (!done)
                 {
-                    Instantiate(portal, new Vector3(0,18f,0), Quaternion.identity);
+                    foreach (Transform portal in portals)
+                    {
+                        portal.gameObject.SetActive(true);
+                        
+                    }
                     done = true;
                 }
                 break;
@@ -112,7 +119,8 @@ public class GameManager : MonoBehaviour
                 //FIXME: make me better
                 if (UnityEngine.Random.Range(0, 100) < 2 && spawned < level * 7)
                 {
-                    float rad = UnityEngine.Random.Range(0, 360f) * Mathf.Deg2Rad;
+                    float grad = UnityEngine.Random.Range(0, 360f);
+                    float rad = grad * Mathf.Deg2Rad;
                     float radius = UnityEngine.Random.Range(minRadius, maxRadius);
                     float x = radius * Mathf.Cos(rad);
                     float y = radius * Mathf.Sin(rad);
@@ -124,7 +132,9 @@ public class GameManager : MonoBehaviour
                     g.transform.position = pos;
                     g.transform.rotation = rot;
 
-                    g.GetComponentInChildren<Goblin>().level = level;
+                    Goblin goblin = g.GetComponentInChildren<Goblin>();
+                    goblin.level = level;
+                    goblin.magic = (Mathf.FloorToInt(grad / 72f) + 3) % 5;
 
                     spawned++;
                 }

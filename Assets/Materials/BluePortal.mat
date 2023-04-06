@@ -20,7 +20,7 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: PortalMaterial
+  m_Name: BluePortal
   m_Shader: {fileID: -6465566751694194690, guid: 85aff9724278a431b8132e46fd12f2b8,
     type: 3}
   m_ValidKeywords: []
@@ -56,8 +56,8 @@ Material:
     - _QueueOffset: 0
     - _dissolve: 2
     - _scale: 5
-    - _speed: 0.5
+    - _speed: 0.3
     - _strength: 20
     m_Colors:
-    - _color: {r: 4, g: 0.0627451, b: 2.980392, a: 1}
+    - _color: {r: 2.1585307, g: 17.941486, b: 58.897034, a: 1}
   m_BuildTextureStacks: []
