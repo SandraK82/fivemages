@@ -1,6 +1,6 @@
 %YAML 1.1
 %TAG !u! tag:unity3d.com,2011:
---- !u!114 &-7729527929729180576
+--- !u!114 &-8531939980930552748
 MonoBehaviour:
   m_ObjectHideFlags: 11
   m_CorrespondingSourceObject: {fileID: 0}
@@ -20,8 +20,8 @@ Material:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: YellowPortal
-  m_Shader: {fileID: -6465566751694194690, guid: 85aff9724278a431b8132e46fd12f2b8,
+  m_Name: TowerDissolve
+  m_Shader: {fileID: -6465566751694194690, guid: 16357e6eaf79d47aebcde88168c75839,
     type: 3}
   m_ValidKeywords: []
   m_InvalidKeywords: []
@@ -34,8 +34,16 @@ Material:
   m_SavedProperties:
     serializedVersion: 3
     m_TexEnvs:
-    - _Texture2D:
-        m_Texture: {fileID: 10300, guid: 0000000000000000f000000000000000, type: 0}
+    - _Albedo:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Metallic:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
+    - _Normal:
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - unity_Lightmaps:
@@ -52,12 +60,11 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
+    - _EdgeWidth: 0.045
     - _QueueControl: 0
     - _QueueOffset: 0
-    - _dissolve: 2
-    - _scale: 5
-    - _speed: 0.3
-    - _strength: 20
+    - _dissolved: 0.9939436
     m_Colors:
-    - _color: {r: 10.087279, g: 12.844469, b: 0.53798825, a: 1}
+    - _Color: {r: 0.990566, g: 0.990566, b: 0.990566, a: 1}
+    - _EdgeColor: {r: 0.55418354, g: 0.1566665, b: 2.670157, a: 1}
   m_BuildTextureStacks: []

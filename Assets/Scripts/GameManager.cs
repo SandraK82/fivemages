@@ -6,6 +6,20 @@ using UnityEngine.InputSystem;
 
 public class GameManager : MonoBehaviour
 {
+    public class ScoreEventArgs : EventArgs
+    {
+        public int score;
+    }
+    public class EnergyEventArgs : EventArgs
+    {
+        public float energy;
+        public float maxEnergy;
+    }
+    private static GameManager Instance;
+    public static event EventHandler<ScoreEventArgs> OnScore;
+    public static event EventHandler<EnergyEventArgs> OnEnergy;
+    private int score = 0;
+
     [SerializeField] private Transform goblinPrefab;
     [SerializeField] private int level = 1;
 
@@ -24,6 +38,9 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private float mageRadius = 58f;
 
+    public float maxEnergy;
+    public float energy;
+
     public enum GameState
     {
         AWAKE,
@@ -33,7 +50,9 @@ public class GameManager : MonoBehaviour
         AWAKE_MAGE_4,
         AWAKE_MAGE_5,
         AWAKE_PORTAL,
-        PLAY
+        PLAY,
+        GAME_OVER,
+        DOOMSDAY
     };
 
     public GameState state { private set; get; }
@@ -45,24 +64,72 @@ public class GameManager : MonoBehaviour
 
     private bool done = false;
     private int spawned = 0;
+    private int killed = 0;
     private Dictionary<Transform, Vector3> portalPositions;
 
     private PlayerInput input;
 
     private void Awake()
     {
+        Instance = this;
         Goblin.OnGoblinEscaped += OnGoblinEscaped;
+        Goblin.OnGoblinDestroyed += OnGoblinDestroyed;
+
+        input = GetComponent<PlayerInput>();
+        goblins = new List<Goblin>();
+        towers = new List<Tower>();
+
         foreach (Transform portal in portals)
         {
             portal.gameObject.SetActive(false);
         }
-        input = GetComponent<PlayerInput>();
+        Tower.OnDoomsDay += OnDoomsday;
+        Tower.OnTowerOverlap += OnOverlap;
+    }
+
+    private void OnOverlap(object sender, EventArgs e)
+    {
+        Debug.LogError("How Dare you!");
+    }
+
+    private void OnDoomsday(object sender, EventArgs e)
+    {
+        Debug.LogError("doomsday!");
+    }
+
+    private void OnGoblinDestroyed(object sender, EventArgs e)
+    {
+        RemoveGoblin((Goblin)sender);
+    }
+
+    private void RemoveGoblin(Goblin goblin)
+    {
+        score += goblin.level * 7;
+        OnScore?.Invoke(this, new ScoreEventArgs { score = score });
+        goblins.Remove(goblin);
+        killed++;
+        energy = Mathf.Min(energy + goblin.level, maxEnergy);
+        
+        if (killed == spawned && killed > 0)
+        {
+            level++;
+            maxEnergy += level * 7;
+            spawned = killed = 0;
+            Debug.Log("new game level: " + level);
+
+            //For testing:
+            foreach(Tower tower in towers)
+            {
+                tower.SetLevel(level);
+            }
+        }
+        OnEnergy?.Invoke(this, new EnergyEventArgs { energy = energy,maxEnergy = maxEnergy });
     }
 
     private void OnGoblinEscaped(object sender, EventArgs e)
     {
-        //FIXME: make me better
-        spawned--;
+        RemoveGoblin((Goblin)sender);
+        Debug.LogError("dead by "+((Goblin)sender).transform.parent.name);
     }
 
     private void OnEnable()
@@ -73,8 +140,10 @@ public class GameManager : MonoBehaviour
     private void OnDisable()
     {
         input.enabled = false;
-
     }
+
+    private List<Goblin> goblins;
+    private List<Tower> towers;
 
     private void Start()
     {
@@ -112,6 +181,20 @@ public class GameManager : MonoBehaviour
         selector = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         selector.GetComponent<Collider>().enabled = false;
         selector.transform.localScale = new Vector3(4f, 4f, 4f);
+
+        OnScore?.Invoke(this, new ScoreEventArgs { score = 0 });
+        maxEnergy = 7 * 7;
+        energy = maxEnergy;
+        OnEnergy?.Invoke(this, new EnergyEventArgs { energy = energy, maxEnergy = maxEnergy });
+
+        //FIXME: debug only
+        foreach (Tower tower in UnityEngine.Object.FindObjectsOfType<Tower>())
+        {
+            towers.Add(tower);
+            //For testing:
+            tower.SetLevel(level);
+            
+        }
     }
 
     private void Update()
@@ -224,6 +307,7 @@ public class GameManager : MonoBehaviour
 
             case GameState.PLAY:
                 //FIXME: make me better
+                
                 if (UnityEngine.Random.Range(0, 100) < 2 && spawned < level * 7)
                 {
                     float grad = UnityEngine.Random.Range(0, 360f);
@@ -242,8 +326,14 @@ public class GameManager : MonoBehaviour
                     Goblin goblin = g.GetComponentInChildren<Goblin>();
                     goblin.level = level;
                     goblin.magic = (Mathf.FloorToInt(grad / 72f) + 3) % 5;
-
+                    goblins.Add(goblin);
                     spawned++;
+                    g.name = "Goblin lvl: " + level + " #" + spawned;
+                }
+
+                foreach(Tower tower in towers)
+                {
+                    tower.checkOnGoblins(goblins);
                 }
                 break;
         }
@@ -279,7 +369,8 @@ public class GameManager : MonoBehaviour
                     if (selectedMage.GetState() == Mage.MageState.IDLE)
                     {
                         selector.GetComponent<MeshRenderer>().material.color = Color.red;
-                    } else
+                    }
+                    else
                     {
                         selector.SetActive(false);
                     }
@@ -384,5 +475,10 @@ public class GameManager : MonoBehaviour
                 }
             }
         }
+    }
+
+    public static IEnumerable<Tower> GetTowers()
+    {
+        return Instance.towers;
     }
 }
