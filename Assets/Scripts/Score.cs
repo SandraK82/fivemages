@@ -12,7 +12,17 @@ public class Score : MonoBehaviour
 
     private void Awake()
     {
+        
+    }
+
+    private void OnEnable()
+    {
         GameManager.OnScore += OnScore;
+    }
+
+    private void OnDisable()
+    {
+        GameManager.OnScore -= OnScore;
     }
 
     private void OnScore(object sender, ScoreEventArgs e)

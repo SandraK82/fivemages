@@ -125,7 +125,6 @@ public class Mage : MonoBehaviour
                 }
                 if (Mathf.Abs(this.transform.localScale.y - 1.0f) > 0.01f)
                 {
-                    Debug.Log("prep to move");
                     this.transform.localScale = new Vector3(1f, this.transform.localScale.y + ((scaleTarget - this.transform.localScale.y) * Time.deltaTime * 10f), 1.0f);
                 }
                 else
@@ -155,6 +154,7 @@ public class Mage : MonoBehaviour
                     }
                     else
                     {
+                        Debug.Log("mage idle");
                         state = MageState.IDLE;
                     }
                     npos = transform.position + (npos * Time.deltaTime * 8f);

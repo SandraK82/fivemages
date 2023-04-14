@@ -31,11 +31,14 @@ public class Tower : MonoBehaviour, IComparable
     };
 
     public State state;
+    private Mage myMage;
     private float beamTime;
     private float beamTimeOriginal;
 
     private float radiusFactor = 1.75f;
     private Towerchain towerchain = null;
+    private LineRenderer builder;
+    [SerializeField] private Material builderMaterial;
 
     private void OnDrawGizmos()
     {
@@ -49,6 +52,12 @@ public class Tower : MonoBehaviour, IComparable
         originalMaterials = new Dictionary<MeshRenderer, Material>();
         beamTimeOriginal = beamTime = 7f;
         beams = new Dictionary<Goblin, Beam>();
+
+        builder = gameObject.AddComponent<LineRenderer>();
+        builder.material = builderMaterial;
+        builder.receiveShadows = false;
+        builder.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        builder.enabled = false;
 
         switch (magic)
         {
@@ -73,10 +82,13 @@ public class Tower : MonoBehaviour, IComparable
                 rangePlane.GetComponent<MeshRenderer>().material.color = Color.green;
                 break;
         }
+        crystal.material.SetFloat("_alpha", 0.4f);
 
         PrepareBeam(transform);
 
         connectedGoblins = new List<Goblin>();
+
+        Deselect();
     }
 
     private void Update()
@@ -102,6 +114,19 @@ public class Tower : MonoBehaviour, IComparable
         switch(state)
         {
             case State.BUILDING:
+                if(!builder.enabled && myMage != null)
+                {
+                    builder.positionCount = 2;
+                    builder.SetPosition(0, transform.position);
+                    builder.SetPosition(1, myMage.transform.position);
+                    builder.enabled = true;
+                    builder.material.SetFloat("_dissolved", 0.4f);
+                    builder.startWidth = 2f;
+                    builder.endWidth = 2f;
+                }
+                builder.material.SetFloat("_dissolved", UnityEngine.Random.Range(0.25f, 0.65f));
+                if (myMage!=null) builder.SetPosition(1, myMage.transform.position);
+        
                 beamTime -= Time.deltaTime;
                 if (beamTime <= 0f)
                 {
@@ -119,9 +144,50 @@ public class Tower : MonoBehaviour, IComparable
                     }
                 }
                 break;
-            case State.STANDING:
+            case State.UPGRADING:
+                if(myMage != null)
+                {
+                    if (!builder.enabled)
+                    {
+                        builder.positionCount = 2;
+                        builder.SetPosition(0, transform.position);
+                        builder.enabled = true;
+                        builder.material.SetFloat("_dissolved", 0.4f);
+                        builder.startWidth = 2f;
+                        builder.endWidth = 2f;
+                    }
+                    builder.material.SetFloat("_dissolved", UnityEngine.Random.Range(0.25f, 0.65f));
+                    builder.SetPosition(1, myMage.transform.position);
 
+                    if (myMage.GetState()==Mage.MageState.IDLE)
+                    {
+                        beamTime -= Time.deltaTime;
+                        if (beamTime <= 0f)
+                        {
+                            foreach (MeshRenderer mr in originalMaterials.Keys)
+                            {
+                                mr.material = originalMaterials[mr];
+                            }
+                            state = State.STANDING;
+                            level += 1;
+                        }
+                        else
+                        {
+                            foreach (MeshRenderer mr in originalMaterials.Keys)
+                            {
+                                mr.material.SetFloat("_dissolved", ((beamTime / beamTimeOriginal)/2f));
+                            }
+                        }
+                    }
+                } else
+                {
+                    state = State.STANDING;
+                }
                 break;
+            case State.STANDING:
+                if (builder.enabled) builder.enabled = false;
+                break;
+
         }
 
         if (towerchain != null && towerchain.linked[0] == this) towerchain.ChangeMaterial();
@@ -129,6 +195,8 @@ public class Tower : MonoBehaviour, IComparable
 
     private void PrepareBeam(Transform t)
     {
+        if (t == transform) originalMaterials.Clear();
+
         if (t == rangePlane) return;    
         if (t.TryGetComponent<MeshRenderer>(out MeshRenderer mr))
         {
@@ -164,6 +232,18 @@ public class Tower : MonoBehaviour, IComparable
                 }
             }
         }
+        List<Goblin> removes = new List<Goblin>();
+        foreach (Goblin goblin in beams.Keys)
+        {
+            if(!connectedGoblins.Contains(goblin))
+            {
+                Beam b = beams[goblin];
+                goblin.RemoveBeam(b);
+                removes.Add(goblin);
+            }
+        }
+        foreach (Goblin goblin in removes)
+            beams.Remove(goblin);
     }
 
     public int GetLevel() => level;
@@ -255,5 +335,38 @@ public class Tower : MonoBehaviour, IComparable
             return towerchain.linked.Count;
         }
         return 1f;
+    }
+
+    public State GetState()
+    {
+        return state;
+    }
+
+    public void Select()
+    {
+        rangePlane.gameObject.SetActive(true);
+    }
+
+    public void Deselect()
+    {
+        rangePlane.gameObject.SetActive(false);
+    }
+
+    public void Upgrade()
+    {
+        state = State.UPGRADING;
+        myMage = GameManager.GetMage(magic);
+        float angle = Vector3.SignedAngle(Vector3.right, transform.position, Vector3.up);
+        angle += 360f;
+        angle %= 360;
+        myMage.Move(angle);
+
+        beamTimeOriginal = beamTime = 7f;
+        PrepareBeam(transform);
+        foreach (MeshRenderer mr in originalMaterials.Keys)
+        {
+            mr.material.SetFloat("_dissolved", 0.5f);
+        }
+        GameManager.RemoveEnergy(level * 7);
     }
 }

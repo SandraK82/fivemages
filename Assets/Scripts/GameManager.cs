@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using static UnityEngine.EventSystems.EventTrigger;
 
 public class GameManager : MonoBehaviour
 {
@@ -15,9 +16,21 @@ public class GameManager : MonoBehaviour
         public float energy;
         public float maxEnergy;
     }
+    public class GameStateArgs : EventArgs
+    {
+        public GameState state;
+        public int level;
+    }
+    public class SelectedArgs : EventArgs
+    {
+        public Mage mage;
+        public Tower tower;
+    }
     private static GameManager Instance;
     public static event EventHandler<ScoreEventArgs> OnScore;
     public static event EventHandler<EnergyEventArgs> OnEnergy;
+    public static event EventHandler<GameStateArgs> OnGameState;
+    public static event EventHandler<SelectedArgs> OnSelected;
     private int score = 0;
 
     [SerializeField] private Transform goblinPrefab;
@@ -35,11 +48,12 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Transform mageRed;
     [SerializeField] private Transform lightYellow;
     [SerializeField] private Transform mageYellow;
+    [SerializeField] private Material ballMaterial;
 
     [SerializeField] private float mageRadius = 58f;
 
     public float maxEnergy;
-    public float energy;
+    public float currentEnergy;
 
     public enum GameState
     {
@@ -50,12 +64,13 @@ public class GameManager : MonoBehaviour
         AWAKE_MAGE_4,
         AWAKE_MAGE_5,
         AWAKE_PORTAL,
+        PREPARE,
         PLAY,
         GAME_OVER,
         DOOMSDAY
     };
 
-    public GameState state { private set; get; }
+    private GameState gameState;
 
     private float stateTime = 0;
 
@@ -69,11 +84,24 @@ public class GameManager : MonoBehaviour
 
     private PlayerInput input;
 
+    private GameObject selector;
+
+    private GameObject selection = null;
+    private InputAction clickAction;
+
+    [SerializeField] private float buildRadius = 0.9f * 58f;//mageRadius
+
+    [SerializeField] private Transform towerPrefab;
+    [SerializeField] private Transform hollowTower;
+
+    private List<Mage> mages;
+    private List<Goblin> goblins;
+    private List<Tower> towers;
+    private bool buildMode = false;
+
     private void Awake()
     {
         Instance = this;
-        Goblin.OnGoblinEscaped += OnGoblinEscaped;
-        Goblin.OnGoblinDestroyed += OnGoblinDestroyed;
 
         input = GetComponent<PlayerInput>();
         goblins = new List<Goblin>();
@@ -83,9 +111,10 @@ public class GameManager : MonoBehaviour
         {
             portal.gameObject.SetActive(false);
         }
-        Tower.OnDoomsDay += OnDoomsday;
-        Tower.OnTowerOverlap += OnOverlap;
+
+        mages = new List<Mage>();
     }
+
 
     private void OnOverlap(object sender, EventArgs e)
     {
@@ -108,43 +137,48 @@ public class GameManager : MonoBehaviour
         OnScore?.Invoke(this, new ScoreEventArgs { score = score });
         goblins.Remove(goblin);
         killed++;
-        energy = Mathf.Min(energy + goblin.level, maxEnergy);
-        
+        SetEnergy(Mathf.Min(currentEnergy + goblin.level, maxEnergy));
+
         if (killed == spawned && killed > 0)
         {
             level++;
             maxEnergy += level * 7;
             spawned = killed = 0;
-            Debug.Log("new game level: " + level);
-
-            //For testing:
-            foreach(Tower tower in towers)
-            {
-                tower.SetLevel(level);
-            }
+            SetState(GameState.PREPARE);
         }
-        OnEnergy?.Invoke(this, new EnergyEventArgs { energy = energy,maxEnergy = maxEnergy });
+    }
+
+    private void SetEnergy(float value)
+    {
+        currentEnergy = value;
+
+        OnEnergy?.Invoke(this, new EnergyEventArgs { energy = currentEnergy, maxEnergy = maxEnergy });
     }
 
     private void OnGoblinEscaped(object sender, EventArgs e)
     {
         RemoveGoblin((Goblin)sender);
-        Debug.LogError("dead by "+((Goblin)sender).transform.parent.name);
+        Debug.LogError("dead by " + ((Goblin)sender).transform.parent.name);
     }
 
     private void OnEnable()
     {
         input.enabled = true;
+        Goblin.OnGoblinEscaped += OnGoblinEscaped;
+        Goblin.OnGoblinDestroyed += OnGoblinDestroyed;
+        Tower.OnDoomsDay += OnDoomsday;
+        Tower.OnTowerOverlap += OnOverlap;
     }
 
     private void OnDisable()
     {
         input.enabled = false;
+        Goblin.OnGoblinEscaped -= OnGoblinEscaped;
+        Goblin.OnGoblinDestroyed -= OnGoblinDestroyed;
+        Tower.OnDoomsDay -= OnDoomsday;
+        Tower.OnTowerOverlap -= OnOverlap;
     }
-
-    private List<Goblin> goblins;
-    private List<Tower> towers;
-
+        
     private void Start()
     {
         clickAction = input.currentActionMap.FindAction("Position");
@@ -162,53 +196,50 @@ public class GameManager : MonoBehaviour
 
         Vector3 dir = (mageBlue.transform.position - Vector3.zero);
         mageBlue.transform.position = dir * (mageRadius / dir.magnitude);
+        mages.Add(mageBlue.GetComponent<Mage>());
 
         dir = (mageRed.transform.position - Vector3.zero);
         mageRed.transform.position = dir * (mageRadius / dir.magnitude);
+        mages.Add(mageRed.GetComponent<Mage>());
 
         dir = (mageYellow.transform.position - Vector3.zero);
         mageYellow.transform.position = dir * (mageRadius / dir.magnitude);
+        mages.Add(mageYellow.GetComponent<Mage>());
 
         dir = (mageWhite.transform.position - Vector3.zero);
         mageWhite.transform.position = dir * (mageRadius / dir.magnitude);
+        mages.Add(mageWhite.GetComponent<Mage>());
 
         dir = (mageGreen.transform.position - Vector3.zero);
         mageGreen.transform.position = dir * (mageRadius / dir.magnitude);
+        mages.Add(mageGreen.GetComponent<Mage>());
 
-        state = GameState.AWAKE;
+        SetState(GameState.AWAKE);
         stateTime = 1f;
 
         selector = GameObject.CreatePrimitive(PrimitiveType.Sphere);
         selector.GetComponent<Collider>().enabled = false;
+        selector.GetComponent<MeshRenderer>().material = ballMaterial;
         selector.transform.localScale = new Vector3(4f, 4f, 4f);
 
         OnScore?.Invoke(this, new ScoreEventArgs { score = 0 });
         maxEnergy = 7 * 7;
-        energy = maxEnergy;
-        OnEnergy?.Invoke(this, new EnergyEventArgs { energy = energy, maxEnergy = maxEnergy });
+        SetEnergy(maxEnergy);
 
-        //FIXME: debug only
-        foreach (Tower tower in UnityEngine.Object.FindObjectsOfType<Tower>())
-        {
-            towers.Add(tower);
-            //For testing:
-            tower.SetLevel(level);
-            
-        }
     }
 
     private void Update()
     {
-        if (state < GameState.PLAY)
+        if (gameState < GameState.PREPARE)
         {
             stateTime -= Time.deltaTime;
             if (stateTime < 0 && done)
             {
-                state++;
+                SetState(gameState + 1);
                 stateTime = 1f;
                 done = false;
             }
-            if (state == GameState.PLAY)
+            if (gameState == GameState.PREPARE)
             {
                 foreach (Transform portal in portals)
                 {
@@ -217,7 +248,7 @@ public class GameManager : MonoBehaviour
             }
         }
 
-        switch (state)
+        switch (gameState)
         {
             case GameState.AWAKE:
                 if (!done)
@@ -307,7 +338,7 @@ public class GameManager : MonoBehaviour
 
             case GameState.PLAY:
                 //FIXME: make me better
-                
+
                 if (UnityEngine.Random.Range(0, 100) < 2 && spawned < level * 7)
                 {
                     float grad = UnityEngine.Random.Range(0, 360f);
@@ -331,109 +362,120 @@ public class GameManager : MonoBehaviour
                     g.name = "Goblin lvl: " + level + " #" + spawned;
                 }
 
-                foreach(Tower tower in towers)
+                foreach (Tower tower in towers)
                 {
                     tower.checkOnGoblins(goblins);
                 }
                 break;
         }
 
-        if (selectedMage)
+        Vector2 clickPoint = clickAction.ReadValue<Vector2>();
+        if (Physics.Raycast(Camera.main.ScreenPointToRay(clickPoint), out RaycastHit hit))
         {
-            selector.SetActive(true);
-            Vector2 clickPoint = clickAction.ReadValue<Vector2>();
-            if (Physics.Raycast(Camera.main.ScreenPointToRay(clickPoint), out RaycastHit hit))
+            if (buildMode)
             {
-                selector.transform.position = hit.point;
-
-                if (hit.transform.gameObject.TryGetComponent<Mage>(out Mage mage))
+                if (hit.transform.gameObject.name == "Plane")
                 {
-                    selector.GetComponent<MeshRenderer>().material.color = Color.green;
-                }
-                else if (hit.transform.gameObject.name == "Plane")
-                {
-                    if (selectedMage.GetState() == Mage.MageState.IDLE)
-                    {
-                        if (hit.point.magnitude <= buildRadius)
-                            selector.GetComponent<MeshRenderer>().material.color = Color.green;
-                        else
-                            selector.GetComponent<MeshRenderer>().material.color = Color.red;
-                    }
-                    else
-                    {
-                        selector.SetActive(false);
-                    }
+                    selector.SetActive(false);
+                    hollowTower.position = hit.point;
+                    hollowTower.forward = new Vector3(-hollowTower.position.x, hollowTower.position.y, -hollowTower.position.z);
+                    hollowTower.gameObject.SetActive(true);
                 }
                 else
                 {
-                    if (selectedMage.GetState() == Mage.MageState.IDLE)
-                    {
-                        selector.GetComponent<MeshRenderer>().material.color = Color.red;
-                    }
-                    else
-                    {
-                        selector.SetActive(false);
-                    }
+                    hollowTower.gameObject.SetActive(false);
+                    selector.SetActive(true);
+                    selector.transform.position = hit.point;
+                    selector.GetComponent<MeshRenderer>().material.color = Color.red;
+                }
+
+            }
+            else
+            {
+                hollowTower.gameObject.SetActive(false);
+                selector.SetActive(true);
+                selector.transform.position = hit.point;
+
+                selector.GetComponent<MeshRenderer>().material.color = Color.red;
+
+                if (hit.transform.gameObject.TryGetComponent<Mage>(out Mage selectedMage) && selectedMage.GetState() == Mage.MageState.IDLE)
+                {
+                    selector.GetComponent<MeshRenderer>().material.color = Color.green;
+                }
+                else if (hit.transform.gameObject.TryGetComponent<Tower>(out Tower selectedTower))
+                {
+                    selector.GetComponent<MeshRenderer>().material.color = Color.green;
+                }
+                else if (selection != null && hit.transform.gameObject.name == "Plane" && selection.TryGetComponent<Mage>(out Mage mage1) && mage1.GetState() == Mage.MageState.IDLE && hit.point.magnitude <= buildRadius)
+                {
+                    selector.GetComponent<MeshRenderer>().material.color = Color.green;
                 }
             }
         }
         else
         {
             selector.SetActive(false);
-            Vector2 clickPoint = clickAction.ReadValue<Vector2>();
-            if (Physics.Raycast(Camera.main.ScreenPointToRay(clickPoint), out RaycastHit hit))
-            {
-                selector.transform.position = hit.point;
-
-                if (hit.transform.gameObject.TryGetComponent<Mage>(out Mage mage))
-                {
-                    if (mage != selectedMage)
-                    {
-                        selector.SetActive(true);
-
-                        selector.GetComponent<MeshRenderer>().material.color = Color.green;
-                    }
-                }
-            }
         }
     }
 
-    private GameObject selector;
-
-    private Mage selectedMage = null;
-    private InputAction clickAction;
-
-    [SerializeField] private float buildRadius = 0.9f * 58f;//mageRadius
+    public static void SetBuildMode(bool build)
+    {
+        Instance.buildMode = true;
+    }
 
     private void OnClick(InputValue value)
     {
         Vector2 clickPoint = clickAction.ReadValue<Vector2>();
         if (Physics.Raycast(Camera.main.ScreenPointToRay(clickPoint), out RaycastHit hit))
         {
+            Debug.Log("hit: " + hit.transform.gameObject.name);
             if (hit.transform.gameObject.TryGetComponent<Mage>(out Mage mage))
             {
-                if (mage != selectedMage)
+                if (mage.gameObject != selection)
                 {
-                    if (selectedMage)
+                    if (selection != null && selection.TryGetComponent<Mage>(out Mage selectedMage))
                     {
                         selectedMage.Deselect();
                     }
-                    selectedMage = mage;
+                    else if (selection != null && selection.TryGetComponent<Tower>(out Tower selectedTower))
+                    {
+                        selectedTower.Deselect();
+                    }
+                    selection = mage.gameObject;
                     mage.Select();
+                    OnSelected?.Invoke(this, new SelectedArgs { mage = mage });
                 }
             }
-            else //FIXME: need to test towers
+            else if (hit.transform.gameObject.TryGetComponent<Tower>(out Tower tower))
+            {
+                if (tower.gameObject != selection)
+                {
+                    if (selection != null && selection.TryGetComponent<Mage>(out Mage selectedMage))
+                    {
+                        selectedMage.Deselect();
+                    }
+                    else if (selection != null && selection.TryGetComponent<Tower>(out Tower selectedTower))
+                    {
+                        selectedTower.Deselect();
+                    }
+                    selection = tower.gameObject;
+                    tower.Select();
+                    OnSelected?.Invoke(this, new SelectedArgs { tower = tower });
+                }
+            }
+            else
             {
                 if (hit.transform.gameObject.name == "Plane")
                 {
-                    if (hit.point.magnitude < buildRadius && selectedMage != null && selectedMage.GetState() == Mage.MageState.IDLE)
+                    if (hit.point.magnitude < buildRadius && selection != null && selection.TryGetComponent<Mage>(out Mage selectedMage) && selectedMage.GetState() == Mage.MageState.IDLE)
                     {
+
                         /*float angle = Vector3.SignedAngle(Vector3.right, hit.point, Vector3.up);
                         angle += 360f;
                         angle %= 360;
-                        
+
                         int sector = Mathf.FloorToInt(angle / 72f) % 5;
-                        
+
                         float nangle = angle - (sector * 72f);
                         float shortDistance = 20.5f;//TODO: Fix this formula or forget it buildRadius * 0.525731112119134f;//sin beta / sin alpha
 
@@ -480,5 +522,34 @@ public class GameManager : MonoBehaviour
     public static IEnumerable<Tower> GetTowers()
     {
         return Instance.towers;
+    }
+
+    public static void GameStateContinue()
+    {
+        Instance.SetState(GameState.PLAY);
+    }
+
+    private void SetState(GameState newState)
+    {
+        Debug.Log("Setting state: " + newState);
+        gameState = newState;
+        OnGameState?.Invoke(this, new GameStateArgs { state = gameState, level = level });
+    }
+
+    public static Mage GetMage(int magic)
+    {
+        foreach (Mage mage in Instance.mages)
+        {
+            if (mage.magic == magic)
+            {
+                return mage;
+            }
+        }
+        return null;
+    }
+
+    public static void RemoveEnergy(int energy)
+    {
+        Instance.SetEnergy(Instance.currentEnergy - energy);
     }
 }
