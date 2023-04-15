@@ -23,7 +23,8 @@ public class Mage : MonoBehaviour
     {
         AWAKE,
         IDLE,
-        MOVE
+        MOVE,
+        BUILDING
     }
 
     private MageState state;
@@ -56,6 +57,17 @@ public class Mage : MonoBehaviour
         for (int i = 0; i < t.childCount; i++)
         {
             PrepareBeam(t.GetChild(i));
+        }
+    }
+
+    public void SetBuilding(bool isbuilding)
+    {
+        if( state == MageState.BUILDING && !isbuilding)
+        {
+            state = MageState.IDLE;
+        } else if(state == MageState.IDLE && isbuilding)
+        {
+            state = MageState.BUILDING;
         }
     }
 
@@ -154,7 +166,6 @@ public class Mage : MonoBehaviour
                     }
                     else
                     {
-                        Debug.Log("mage idle");
                         state = MageState.IDLE;
                     }
                     npos = transform.position + (npos * Time.deltaTime * 8f);
@@ -190,7 +201,6 @@ public class Mage : MonoBehaviour
 
     public void Move(float angle)
     {
-        Debug.Log("Mage moves to: " + angle);
         targetAngle = angle;
         state = MageState.MOVE;
     }

@@ -25,7 +25,7 @@ public class Portal : MonoBehaviour
         if (grad < -180f) grad += 360f;
         if (grad > 180f) grad -= 360f;
         float turn = Time.deltaTime * (grad) / div;
-        //Debug.Log("turn: " + turn + " target: " + target+" div:"+div+" delta:"+ Time.deltaTime);
+
         transform.rotation = Quaternion.Euler(0, transform.rotation.eulerAngles.y + turn, 0);
         timer -= Time.deltaTime;
 

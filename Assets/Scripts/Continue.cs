@@ -30,19 +30,21 @@ public class Continue : MonoBehaviour
     private void OnDestroy()
     {
         GameManager.OnGameState -= GameManager_OnGameState;
+        continueButton = null;
+        text = null;
     }
 
     private void GameManager_OnGameState(object sender, GameManager.GameStateArgs e)
     {
+        if (text == null) return;
+        if (continueButton == null) return;
         switch(e.state)
         {
             case GameManager.GameState.PREPARE:
-                Debug.Log("Enable continue");
                 text.text = "Continue with Wave " + e.level;
                 continueButton.gameObject.SetActive(true);
                 break;
             default:
-                Debug.Log("Disable continue");
                 continueButton.gameObject.SetActive(false);
                 break;
         }

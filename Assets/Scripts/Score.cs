@@ -28,10 +28,7 @@ public class Score : MonoBehaviour
     private void OnScore(object sender, ScoreEventArgs e)
     {
         string s = (e.score / 7) + " x 7";
-        if(e.score==0)
-        {
-            s = "0";
-        }
+        
         score.SetText(s);
         animator.SetTrigger("Wiggle");
     }

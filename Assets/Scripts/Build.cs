@@ -16,7 +16,9 @@ public class Build : MonoBehaviour
     private Tower tower = null;
     private float energy;
     private float time;
-
+    [SerializeField] private AudioSource source;
+    [SerializeField] private AudioClip click;
+    
     private void Awake()
     {
         buildButton.onClick.AddListener(OnClick);
@@ -28,11 +30,30 @@ public class Build : MonoBehaviour
 
     private void OnClick()
     {
-        if(tower != null)
+        source.PlayOneShot(click);
+        if (tower != null)
         {
             Mage amage = GameManager.GetMage(tower.GetMagic());
             if (amage != null && amage.GetState() == Mage.MageState.IDLE)
             {
+                //only check if not yet conencted
+                if (tower.GetConnectedMultiplier() == 1f)
+                {
+                    Vector3 p = tower.transform.position;
+                    float r = 7f * (tower.GetLevel() + 1) * Tower.radiusFactor * 0.5f;
+                    foreach (Tower other in GameManager.GetTowers())
+                    {
+                        if (other == tower) continue;
+
+                        Vector3 tp = other.transform.position;
+                        float tr = 7f * other.GetLevel() * Tower.radiusFactor * 0.5f;
+                        if ((tp - p).magnitude < r + tr)
+                        {
+                            GameManager.WillOverlap();
+                            return;
+                        }
+                    }
+                }
                 tower.Upgrade();
             } else
             {
@@ -42,7 +63,16 @@ public class Build : MonoBehaviour
             }
         } else if(mage != null)
         {
-            GameManager.SetBuildMode(true);
+            if (GameManager.IsBuildMode())
+            {
+                GameManager.SetBuildMode(false);
+                text.text = "Build Tower";
+            }
+            else
+            {
+                GameManager.SetBuildMode(true);
+                text.text = "Cancel Tower Building";
+            }
         }
     }
 
@@ -65,7 +95,7 @@ public class Build : MonoBehaviour
         } else if(mage != null && mage.GetState() == Mage.MageState.IDLE && !buildButton.gameObject.activeSelf)
         {
             GameManager_OnSelected(null, new GameManager.SelectedArgs { mage = mage });
-        }
+        } 
 
         if (tower != null && tower.GetState() != Tower.State.STANDING)
         {
@@ -117,6 +147,7 @@ public class Build : MonoBehaviour
         else
         {
             buildButton.gameObject.SetActive(false);
+            GameManager.SetBuildMode(false);
         }
     }
 

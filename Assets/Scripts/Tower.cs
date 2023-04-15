@@ -35,10 +35,14 @@ public class Tower : MonoBehaviour, IComparable
     private float beamTime;
     private float beamTimeOriginal;
 
-    private float radiusFactor = 1.75f;
+    public const float radiusFactor = 1.75f;
     private Towerchain towerchain = null;
     private LineRenderer builder;
     [SerializeField] private Material builderMaterial;
+    [SerializeField] private AudioSource source;
+    [SerializeField] private AudioClip upgrade;
+    [SerializeField] private AudioClip beam;
+    [SerializeField] private AudioClip connect;
 
     private void OnDrawGizmos()
     {
@@ -49,8 +53,6 @@ public class Tower : MonoBehaviour, IComparable
     private void Awake()
     {
         state = State.BUILDING;
-        originalMaterials = new Dictionary<MeshRenderer, Material>();
-        beamTimeOriginal = beamTime = 7f;
         beams = new Dictionary<Goblin, Beam>();
 
         builder = gameObject.AddComponent<LineRenderer>();
@@ -59,6 +61,17 @@ public class Tower : MonoBehaviour, IComparable
         builder.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         builder.enabled = false;
 
+        connectedGoblins = new List<Goblin>();
+
+        Deselect();
+
+        source = GetComponent<AudioSource>();
+    }
+
+    private void Setup()
+    {
+        originalMaterials = new Dictionary<MeshRenderer, Material>();
+        beamTimeOriginal = beamTime = 7f;
         switch (magic)
         {
             case 0:
@@ -84,17 +97,22 @@ public class Tower : MonoBehaviour, IComparable
         }
         crystal.material.SetFloat("_alpha", 0.4f);
 
+        SetLevel(0);
+
         PrepareBeam(transform);
-
-        connectedGoblins = new List<Goblin>();
-
-        Deselect();
     }
 
     private void Update()
     {
         rangePlane.localScale = new Vector3(7f * level * 0.1f * radiusFactor, 1, 7f * level * 0.1f * radiusFactor);
 
+        if(!rangePlane.gameObject.activeSelf && ( selected || GameManager.IsBuildMode() ))
+        {
+            rangePlane.gameObject.SetActive(true);
+        } else if(rangePlane.gameObject.activeSelf && !selected && !GameManager.IsBuildMode())
+        {
+            rangePlane.gameObject.SetActive(false);
+        }
         List<Goblin> removes = new List<Goblin>();
         foreach(Goblin goblin in beams.Keys)
         {
@@ -125,28 +143,56 @@ public class Tower : MonoBehaviour, IComparable
                     builder.endWidth = 2f;
                 }
                 builder.material.SetFloat("_dissolved", UnityEngine.Random.Range(0.25f, 0.65f));
-                if (myMage!=null) builder.SetPosition(1, myMage.transform.position);
-        
-                beamTime -= Time.deltaTime;
-                if (beamTime <= 0f)
+                if (myMage != null)
                 {
-                    foreach (MeshRenderer mr in originalMaterials.Keys)
-                    {
-                        mr.material = originalMaterials[mr];
-                    }
-                    state = State.STANDING;
+                    myMage.SetBuilding(true);
+                    builder.SetPosition(1, myMage.transform.position);
                 }
-                else
+                if (myMage != null && myMage.GetState() == Mage.MageState.BUILDING)
                 {
-                    foreach (MeshRenderer mr in originalMaterials.Keys)
+
+                    beamTime -= Time.deltaTime;
+                    if (beamTime <= 0f)
                     {
-                        mr.material.SetFloat("_dissolved", beamTime / beamTimeOriginal);
+                        foreach (MeshRenderer mr in originalMaterials.Keys)
+                        {
+                            mr.material = originalMaterials[mr];
+                        }
+                        state = State.STANDING;
+                        myMage.SetBuilding(false);
+                        SetLevel(1);
+                        source.Stop();
+                        source.loop = false;
+                        source.clip = null;
+                        source.PlayOneShot(upgrade);
+                    }
+                    else
+                    {
+                        foreach (MeshRenderer mr in originalMaterials.Keys)
+                        {
+                            mr.material.SetFloat("_dissolved", beamTime / beamTimeOriginal);
+                        }
+                    }
+                } else if(myMage==null)
+                {
+                    myMage = GameManager.GetMage(magic);
+                    if(myMage && myMage.GetState() == Mage.MageState.IDLE)
+                    {
+                        float angle = Vector3.SignedAngle(Vector3.right, transform.position, Vector3.up);
+                        angle += 360f;
+                        angle %= 360;
+                        myMage.Move(angle);
+                        Setup();
+                    } else
+                    {
+                        myMage = null;
                     }
                 }
                 break;
             case State.UPGRADING:
                 if(myMage != null)
                 {
+                    myMage.SetBuilding(true);
                     if (!builder.enabled)
                     {
                         builder.positionCount = 2;
@@ -159,7 +205,7 @@ public class Tower : MonoBehaviour, IComparable
                     builder.material.SetFloat("_dissolved", UnityEngine.Random.Range(0.25f, 0.65f));
                     builder.SetPosition(1, myMage.transform.position);
 
-                    if (myMage.GetState()==Mage.MageState.IDLE)
+                    if (myMage.GetState()==Mage.MageState.BUILDING)
                     {
                         beamTime -= Time.deltaTime;
                         if (beamTime <= 0f)
@@ -169,7 +215,13 @@ public class Tower : MonoBehaviour, IComparable
                                 mr.material = originalMaterials[mr];
                             }
                             state = State.STANDING;
-                            level += 1;
+                            myMage.SetBuilding(false);
+                            SetLevel(level + 1);
+                            source.Stop();
+                            source.loop = false;
+                            source.clip = null;
+
+                            source.PlayOneShot(upgrade);
                         }
                         else
                         {
@@ -342,14 +394,15 @@ public class Tower : MonoBehaviour, IComparable
         return state;
     }
 
+    private bool selected;
     public void Select()
     {
-        rangePlane.gameObject.SetActive(true);
+        selected = true;
     }
 
     public void Deselect()
     {
-        rangePlane.gameObject.SetActive(false);
+        selected = false;
     }
 
     public void Upgrade()
@@ -368,5 +421,25 @@ public class Tower : MonoBehaviour, IComparable
             mr.material.SetFloat("_dissolved", 0.5f);
         }
         GameManager.RemoveEnergy(level * 7);
+
+        source.clip = beam;
+        source.loop = true;
+        source.Play();
+    }
+
+    public void StartBuilding(Mage mage)
+    {
+        this.magic = mage.magic;
+        myMage = mage;
+        float angle = Vector3.SignedAngle(Vector3.right, transform.position, Vector3.up);
+        angle += 360f;
+        angle %= 360;
+        myMage.Move(angle);
+
+        Setup();
+
+        source.clip = beam;
+        source.loop = true;
+        source.Play();
     }
 }

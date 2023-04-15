@@ -3,7 +3,10 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using static UnityEngine.EventSystems.EventTrigger;
+using TMPro;
+using static UnityEngine.Rendering.DebugUI.Table;
+using UnityEngine.SceneManagement;
+using UnityEngine.UI;
 
 public class GameManager : MonoBehaviour
 {
@@ -52,8 +55,20 @@ public class GameManager : MonoBehaviour
 
     [SerializeField] private float mageRadius = 58f;
 
+
+    [SerializeField] private TextMeshProUGUI error;
+    private float errorTime = 0f;
+
     public float maxEnergy;
     public float currentEnergy;
+
+    [SerializeField] private GameObject doomsday;
+    [SerializeField] private GameObject gameover;
+    [SerializeField] private TextMeshProUGUI scoreUI;
+    [SerializeField] private AudioSource source;
+    [SerializeField] private AudioClip click;
+
+    [SerializeField] private GameObject quitScreen;
 
     public enum GameState
     {
@@ -112,18 +127,36 @@ public class GameManager : MonoBehaviour
             portal.gameObject.SetActive(false);
         }
 
+        foreach(Tower t in FindObjectsOfType<Tower>())
+        {
+            towers.Add(t);
+        }
         mages = new List<Mage>();
+
+        selector = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+        selector.GetComponent<Collider>().enabled = false;
+        selector.GetComponent<MeshRenderer>().material = ballMaterial;
+        selector.transform.localScale = new Vector3(4f, 4f, 4f);
     }
 
+    private static string[] quotes = new string[] {
+        "How dare you",
+        "That’s no good",
+        "You are all Goblins",
+        "Can’t trust these Goblins"
+        };
 
     private void OnOverlap(object sender, EventArgs e)
     {
-        Debug.LogError("How Dare you!");
+        error.SetText("Overlapping magic!\n"+quotes[UnityEngine.Random.Range(0, quotes.Length)]);
+        error.gameObject.SetActive(true);
+        errorTime = 5f;
     }
 
     private void OnDoomsday(object sender, EventArgs e)
     {
-        Debug.LogError("doomsday!");
+        gameState = GameState.DOOMSDAY;
+        doomsday.SetActive(true);
     }
 
     private void OnGoblinDestroyed(object sender, EventArgs e)
@@ -137,19 +170,34 @@ public class GameManager : MonoBehaviour
         OnScore?.Invoke(this, new ScoreEventArgs { score = score });
         goblins.Remove(goblin);
         killed++;
-        SetEnergy(Mathf.Min(currentEnergy + goblin.level, maxEnergy));
+        SetEnergy(Mathf.Min(currentEnergy + (goblin.level*7), maxEnergy));
 
         if (killed == spawned && killed > 0)
         {
             level++;
-            maxEnergy += level * 7;
+            maxEnergy += level * 7 * 7;
             spawned = killed = 0;
             SetState(GameState.PREPARE);
         }
     }
 
+    public void OnBackToTitle()
+    {
+        source.PlayOneShot(click);
+        SceneManager.LoadScene(0);
+    }
+
+    public void OnQuit()
+    {
+        quitScreen.SetActive(true);
+        source.PlayOneShot(click);
+        Application.Quit();
+    }
+
     private void SetEnergy(float value)
     {
+        float old = currentEnergy;
+
         currentEnergy = value;
 
         OnEnergy?.Invoke(this, new EnergyEventArgs { energy = currentEnergy, maxEnergy = maxEnergy });
@@ -157,8 +205,12 @@ public class GameManager : MonoBehaviour
 
     private void OnGoblinEscaped(object sender, EventArgs e)
     {
-        RemoveGoblin((Goblin)sender);
-        Debug.LogError("dead by " + ((Goblin)sender).transform.parent.name);
+        if(gameState == GameState.PLAY)
+        {
+            gameState = GameState.GAME_OVER;
+            gameover.SetActive(true);
+            scoreUI.text = "You Scored " + (score / 7) + " x 7 Points!";
+        }
     }
 
     private void OnEnable()
@@ -217,11 +269,6 @@ public class GameManager : MonoBehaviour
         SetState(GameState.AWAKE);
         stateTime = 1f;
 
-        selector = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-        selector.GetComponent<Collider>().enabled = false;
-        selector.GetComponent<MeshRenderer>().material = ballMaterial;
-        selector.transform.localScale = new Vector3(4f, 4f, 4f);
-
         OnScore?.Invoke(this, new ScoreEventArgs { score = 0 });
         maxEnergy = 7 * 7;
         SetEnergy(maxEnergy);
@@ -230,6 +277,14 @@ public class GameManager : MonoBehaviour
 
     private void Update()
     {
+        if(errorTime >= 0f)
+        {
+            errorTime -= Time.deltaTime;
+            if(errorTime<=0f)
+            {
+                error.gameObject.SetActive(false);
+            }
+        }
         if (gameState < GameState.PREPARE)
         {
             stateTime -= Time.deltaTime;
@@ -420,15 +475,15 @@ public class GameManager : MonoBehaviour
 
     public static void SetBuildMode(bool build)
     {
-        Instance.buildMode = true;
+        Instance.buildMode = build;
     }
 
     private void OnClick(InputValue value)
     {
+        source.PlayOneShot(click);
         Vector2 clickPoint = clickAction.ReadValue<Vector2>();
         if (Physics.Raycast(Camera.main.ScreenPointToRay(clickPoint), out RaycastHit hit))
         {
-            Debug.Log("hit: " + hit.transform.gameObject.name);
             if (hit.transform.gameObject.TryGetComponent<Mage>(out Mage mage))
             {
                 if (mage.gameObject != selection)
@@ -463,51 +518,34 @@ public class GameManager : MonoBehaviour
                     OnSelected?.Invoke(this, new SelectedArgs { tower = tower });
                 }
             }
-            else
+            else if (hit.transform.gameObject.name == "Plane")
             {
-                if (hit.transform.gameObject.name == "Plane")
+                if (hit.point.magnitude < buildRadius && selection != null && selection.TryGetComponent<Mage>(out Mage selectedMage) && selectedMage.GetState() == Mage.MageState.IDLE)
                 {
-                    if (hit.point.magnitude < buildRadius && selection != null && selection.TryGetComponent<Mage>(out Mage selectedMage) && selectedMage.GetState() == Mage.MageState.IDLE)
+                    if (buildMode)
                     {
-
-                        /*float angle = Vector3.SignedAngle(Vector3.right, hit.point, Vector3.up);
-                        angle += 360f;
-                        angle %= 360;
-
-                        int sector = Mathf.FloorToInt(angle / 72f) % 5;
-
-                        float nangle = angle - (sector * 72f);
-                        float shortDistance = 20.5f;//TODO: Fix this formula or forget it buildRadius * 0.525731112119134f;//sin beta / sin alpha
-
-                        float rel = 53f - shortDistance;//TODO: soemthign fishy here
-
-                        float dist = shortDistance;
-
-                        if (nangle <= 36f)
+                        float r = 7f * Tower.radiusFactor * 0.5f;
+                        foreach (Tower tow in towers)
                         {
-                            float p = nangle / 36f; //FIXME: <-- wrong
-                            dist += (1f - p) * rel;
+                            Vector3 tp = tow.transform.position;
+                            float tr = 7f * tow.GetLevel() * Tower.radiusFactor * 0.5f;
+                            if ((tp - hit.point).magnitude < r + tr)
+                            {
+                                WillOverlap();
+                                return;
+                            }
                         }
-                        else
-                        {
-                            float p = (nangle - 36f) / 36f;
-                            dist += p * rel;
-                        }
-
-                        if (hit.point.magnitude >= dist)
-                        {
-                            //we are within the build radius, mark this spot for now
-                            GameObject marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                            marker.transform.position = hit.point + (Vector3.up * 2f);
-                            marker.transform.localScale = new Vector3(3f, 3f, 3f);
-
-                            marker = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-                            marker.transform.position = hit.point.normalized*dist;
-                            Debug.Log("minimal: " + marker.transform.position);
-                            marker.transform.localScale = new Vector3(0.1f, 6f, 0.1f);
-                        }
-                        */ //FIXME nice, not working, dump it
-
+                        Transform inst = Instantiate<Transform>(towerPrefab);
+                        inst.position = hit.point;
+                        inst.forward = new Vector3(-inst.position.x, 0, -inst.position.z);
+                        Tower t = inst.gameObject.GetComponent<Tower>();
+                        towers.Add(t);
+                        t.StartBuilding(selectedMage);
+                        SetBuildMode(false);
+                        RemoveEnergy(7);
+                    }
+                    else
+                    {
                         float angle = Vector3.SignedAngle(Vector3.right, hit.point, Vector3.up);
                         angle += 360f;
                         angle %= 360;
@@ -515,6 +553,11 @@ public class GameManager : MonoBehaviour
                         selectedMage.Move(angle);
                     }
                 }
+            } else if(selection.TryGetComponent<Tower>(out Tower t))
+            {
+                t.Deselect();
+                OnSelected?.Invoke(this, new SelectedArgs { });
+                selection = null;
             }
         }
     }
@@ -531,7 +574,6 @@ public class GameManager : MonoBehaviour
 
     private void SetState(GameState newState)
     {
-        Debug.Log("Setting state: " + newState);
         gameState = newState;
         OnGameState?.Invoke(this, new GameStateArgs { state = gameState, level = level });
     }
@@ -551,5 +593,17 @@ public class GameManager : MonoBehaviour
     public static void RemoveEnergy(int energy)
     {
         Instance.SetEnergy(Instance.currentEnergy - energy);
+    }
+
+    public static bool IsBuildMode()
+    {
+        return Instance.buildMode;
+    }
+
+    public static void WillOverlap()
+    {
+        Instance.error.SetText("No Overlaps allowed!\n" + quotes[UnityEngine.Random.Range(0, quotes.Length)]);
+        Instance.error.gameObject.SetActive(true);
+        Instance.errorTime = 4f;
     }
 }

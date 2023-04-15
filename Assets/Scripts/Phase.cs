@@ -29,10 +29,12 @@ public class Phase : MonoBehaviour
     private void OnDestroy()
     {
         GameManager.OnGameState -= GameManager_OnGameState;
+        text = null;
     }
 
     private void GameManager_OnGameState(object sender, GameManager.GameStateArgs e)
     {
+        if (text == null) return;
         switch(e.state)
         {
             case GameManager.GameState.PREPARE:

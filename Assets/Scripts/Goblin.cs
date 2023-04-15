@@ -40,6 +40,11 @@ public class Goblin : MonoBehaviour
     private float strengthFactor = 0.8f;
     private float attackTime = 0.5f;
 
+    [SerializeField] private AudioClip arrive;
+    [SerializeField] private AudioClip death;
+    [SerializeField] private AudioClip beam;
+    private AudioSource source;
+
     public enum GoblinState
     {
         BEAMING,
@@ -82,6 +87,7 @@ public class Goblin : MonoBehaviour
             maxDamage = 7f * (level * level) / (level - 3f);
         }
         damage = 0f;
+        source = GetComponent<AudioSource>();
     }
 
     private void PrepareBeam(Transform t)
@@ -168,6 +174,7 @@ public class Goblin : MonoBehaviour
                     }
                     SetWingColor();
                     SetTarget();
+                    source.PlayOneShot(arrive);
                 }
                 else
                 {
@@ -176,8 +183,6 @@ public class Goblin : MonoBehaviour
                         mr.material.SetFloat("_dissolved", beamTime / beamTimeOriginal);
                     }
                 }
-                
-
                 break;
             case GoblinState.ROTATING:
                 RotateGoblin();
@@ -285,6 +290,9 @@ public class Goblin : MonoBehaviour
                         }
                         break;
                 }
+
+
+                source.PlayOneShot(beam);
                 /*
             case 0:
                 red -> blue, white; green, yellow; red
@@ -299,10 +307,7 @@ public class Goblin : MonoBehaviour
                 */
             }
         }
-        if (damage != oldDmage)
-        {
-            Debug.Log("Goblin " + transform.parent.name + " new dmg: " + damage + " old: " + this.damage+" maxDmg: "+maxDamage);
-        }
+
         this.damage = damage;
         if (damage < 0f) this.damage = 0f;
         if (damage >= maxDamage)
@@ -310,6 +315,7 @@ public class Goblin : MonoBehaviour
             OnGoblinDestroyed?.Invoke(this, EventArgs.Empty);
             state = GoblinState.DESTROYED;
             Destroy(this.transform.parent.gameObject, 5f);
+            source.PlayOneShot(death);
         }
         if (oldDmage == 0f && damage > 0f)
         {
@@ -352,7 +358,6 @@ public class Goblin : MonoBehaviour
         }
         if (transform.position.magnitude >= escapeRadius) // the pentagram is on 0,0,0 therefore we just need our distance from zero
         {
-            Debug.Log("dead!");
             state = GoblinState.DESTROYED;
             Destroy(this.transform.parent.gameObject, 5f);
             OnGoblinEscaped?.Invoke(this, EventArgs.Empty);
